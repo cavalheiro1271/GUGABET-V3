@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>GugaBet</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #0b1220;
+            color: white;
+        }
+
+        header {
+            background: #111c33;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #263452;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            color: #19e68c;
+        }
+
+        .balance {
+            background: #1a2945;
+            padding: 10px 18px;
+            border-radius: 20px;
+            color: #19e68c;
+            font-weight: bold;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, #14284b, #102039);
+            padding: 35px;
+            border-radius: 18px;
+            margin-bottom: 30px;
+        }
+
+        .hero h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+
+        .hero p {
+            color: #aebbd0;
+            font-size: 17px;
+        }
+
+        .section-title {
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+
+        .event {
+            background: #111c33;
+            border: 1px solid #263452;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 18px;
+        }
+
+        .sport {
+            color: #19e68c;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .teams {
+            font-size: 19px;
+            font-weight: bold;
+        }
+
+        .odds {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .odd {
+            background: #1a2945;
+            border: 1px solid #334565;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .odd:hover {
+            background: #233858;
+            border-color: #19e68c;
+        }
+
+        .odd-name {
+            display: block;
+            color: #aebbd0;
+            margin-bottom: 6px;
+        }
+
+        .odd-value {
+            color: #19e68c;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: #71809a;
+        }
+
+        @media (max-width: 600px) {
+            .odds {
+                grid-template-columns: 1fr;
+            }
+
+            .hero h1 {
+                font-size: 28px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <div class="logo">GugaBet</div>
+
+    <div class="balance">
+        💰 10.000 créditos
+    </div>
+</header>
+
+<div class="container">
+
+    <div class="hero">
+        <h1>Bem-vindo ao GugaBet! 🎯</h1>
+        <p>
+            Simulador esportivo com créditos virtuais.
+            Escolha um evento e faça sua previsão.
+        </p>
+    </div>
+
+    <h2 class="section-title">🔥 Eventos disponíveis</h2>
+
+    <div class="event">
+
+        <div class="event-header">
+            <div>
+                <div class="sport">⚽ FUTEBOL</div>
+                <div class="teams">
+                    Brasil x Argentina
+                </div>
+            </div>
+
+            <div>
+                Hoje • 20:00
+            </div>
+        </div>
+
+        <div class="odds">
+
+            <div class="odd">
+                <span class="odd-name">Brasil</span>
+                <span class="odd-value">1.80</span>
+            </div>
+
+            <div class="odd">
+                <span class="odd-name">Empate</span>
+                <span class="odd-value">3.40</span>
+            </div>
+
+            <div class="odd">
+                <span class="odd-name">Argentina</span>
+                <span class="odd-value">2.10</span>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="event">
+
+        <div class="event-header">
+            <div>
+                <div class="sport">🏀 BASQUETE</div>
+                <div class="teams">
+                    Lakers x Celtics
+                </div>
+            </div>
+
+            <div>
+                Hoje • 21:30
+            </div>
+        </div>
+
+        <div class="odds">
+
+            <div class="odd">
+                <span class="odd-name">Lakers</span>
+                <span class="odd-value">1.70</span>
+            </div>
+
+            <div class="odd">
+                <span class="odd-name">Celtics</span>
+                <span class="odd-value">2.20</span>
+            </div>
+
+            <div class="odd">
+                <span class="odd-name">Total</span>
+                <span class="odd-value">1.95</span>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<footer>
+    GugaBet © 2026 — Simulação com créditos virtuais
+</footer>
+
+</body>
+</html>
