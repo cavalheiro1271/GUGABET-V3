@@ -2,26 +2,32 @@ import os
 import sqlite3
 import random
 from functools import wraps
-from flask import Flask, request, redirect, url_for, session, render_template_string, flash
+
+from flask import (
+    Flask,
+    request,
+    redirect,
+    url_for,
+    session,
+    render_template_string,
+    flash
+)
 from werkzeug.security import generate_password_hash, check_password_hash
+
 
 app = Flask(__name__)
 
-# --------------------------------------------------
-# CONFIGURAÇÃO
-# --------------------------------------------------
-
 app.secret_key = os.environ.get(
     "SECRET_KEY",
-    "gugabet-v3-secret-change-this-key"
+    "gugabet-v3-development-key"
 )
 
 DATABASE = "gugabet.db"
 
 
-# --------------------------------------------------
+# =========================================================
 # BANCO DE DADOS
-# --------------------------------------------------
+# =========================================================
 
 def get_db():
     conn = sqlite3.connect(DATABASE)
@@ -37,7 +43,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
-            balance REAL DEFAULT 1000
+            credits INTEGER DEFAULT 1000,
+            is_admin INTEGER DEFAULT 0
         )
     """)
 
@@ -45,38 +52,87 @@ def init_db():
         CREATE TABLE IF NOT EXISTS bets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
-            team TEXT NOT NULL,
-            amount REAL NOT NULL,
+            sport TEXT NOT NULL,
+            event TEXT NOT NULL,
+            selection TEXT NOT NULL,
             odds REAL NOT NULL,
-            status TEXT NOT NULL,
-            result TEXT,
+            stake INTEGER NOT NULL,
+            result TEXT DEFAULT 'pending',
+            payout INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # Cria usuário administrador inicial
+    admin = conn.execute(
+        "SELECT id FROM users WHERE username = ?",
+        ("admin",)
+    ).fetchone()
+
+    if not admin:
+        conn.execute(
+            """
+            INSERT INTO users
+            (username, password, credits, is_admin)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                "admin",
+                generate_password_hash("admin123"),
+                10000,
+                1
+            )
+        )
 
     conn.commit()
     conn.close()
 
 
-# --------------------------------------------------
-# LOGIN
-# --------------------------------------------------
+init_db()
 
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
+
+# =========================================================
+# AUTENTICAÇÃO
+# =========================================================
+
+def login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
         if "user_id" not in session:
             return redirect(url_for("login"))
-        return f(*args, **kwargs)
+        return view(*args, **kwargs)
 
-    return decorated_function
+    return wrapped
 
 
-# --------------------------------------------------
-# ESTILO
-# --------------------------------------------------
+def admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if "user_id" not in session:
+            return redirect(url_for("login"))
 
-BASE_HTML = """
+        conn = get_db()
+
+        user = conn.execute(
+            "SELECT * FROM users WHERE id = ?",
+            (session["user_id"],)
+        ).fetchone()
+
+        conn.close()
+
+        if not user or not user["is_admin"]:
+            return "Acesso negado.", 403
+
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
+# =========================================================
+# HTML BASE
+# =========================================================
+
+BASE = """
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -93,159 +149,94 @@ BASE_HTML = """
 
 body {
     margin: 0;
-    font-family: Arial, Helvetica, sans-serif;
-    background:
-        radial-gradient(circle at top, #172554 0%, #07111f 45%, #020617 100%);
+    font-family: Arial, sans-serif;
+    background: #08111f;
     color: white;
-    min-height: 100vh;
 }
 
-.navbar {
-    background: rgba(2,6,23,.85);
-    border-bottom: 1px solid rgba(255,255,255,.08);
-    padding: 18px 30px;
+nav {
+    background: #0d1b2f;
+    padding: 18px 25px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border-bottom: 1px solid #20334f;
 }
 
 .logo {
-    font-size: 25px;
-    font-weight: 800;
+    font-size: 24px;
+    font-weight: bold;
+    color: #32e875;
 }
 
-.logo span {
-    color: #22c55e;
-}
-
-.navbar a {
+nav a {
     color: white;
     text-decoration: none;
-    margin-left: 20px;
+    margin-left: 18px;
 }
 
 .container {
-    max-width: 1100px;
+    max-width: 1000px;
     margin: 35px auto;
-    padding: 0 20px;
+    padding: 20px;
 }
 
 .card {
-    background: rgba(15,23,42,.88);
-    border: 1px solid rgba(255,255,255,.08);
-    border-radius: 18px;
+    background: #10233d;
     padding: 25px;
+    border-radius: 16px;
     margin-bottom: 20px;
-    box-shadow: 0 15px 40px rgba(0,0,0,.25);
+    border: 1px solid #203b60;
 }
 
-.hero {
-    text-align: center;
-    padding: 45px 20px;
+h1, h2, h3 {
+    margin-top: 0;
 }
 
-.hero h1 {
-    font-size: 42px;
-    margin: 0 0 10px;
-}
-
-.hero p {
-    color: #cbd5e1;
-}
-
-.balance {
-    font-size: 30px;
-    color: #22c55e;
+button,
+.btn {
+    background: #32e875;
+    color: #06120b;
+    border: none;
+    padding: 12px 18px;
+    border-radius: 9px;
     font-weight: bold;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
 }
 
-input {
+input, select {
     width: 100%;
-    padding: 13px;
+    padding: 12px;
     margin: 8px 0 15px;
-    border-radius: 10px;
-    border: 1px solid #334155;
-    background: #020617;
+    border-radius: 8px;
+    border: 1px solid #345276;
+    background: #09182b;
     color: white;
 }
 
-button {
-    width: 100%;
-    padding: 13px;
-    border: none;
-    border-radius: 10px;
-    background: #22c55e;
-    color: #04120a;
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+}
+
+.credit {
+    font-size: 28px;
+    color: #32e875;
     font-weight: bold;
-    cursor: pointer;
 }
 
-button:hover {
-    background: #16a34a;
-}
-
-.match {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 20px;
-    padding: 20px;
-    border-radius: 14px;
-    background: #0f172a;
+.flash {
+    background: #17395d;
+    padding: 12px;
+    border-radius: 8px;
     margin-bottom: 15px;
-}
-
-.team {
-    font-size: 19px;
-    font-weight: bold;
-}
-
-.odds {
-    color: #22c55e;
-    font-weight: bold;
 }
 
 .small {
-    color: #94a3b8;
-    font-size: 14px;
-}
-
-.error {
-    background: #7f1d1d;
-    padding: 12px;
-    border-radius: 10px;
-    margin-bottom: 15px;
-}
-
-.success {
-    background: #14532d;
-    padding: 12px;
-    border-radius: 10px;
-    margin-bottom: 15px;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-th, td {
-    padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid #334155;
-}
-
-@media(max-width:700px) {
-
-    .match {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .hero h1 {
-        font-size: 32px;
-    }
-
+    color: #9eb0c7;
 }
 
 </style>
@@ -253,38 +244,34 @@ th, td {
 
 <body>
 
-<div class="navbar">
+<nav>
 
-    <div class="logo">
-        🎯 Guga<span>Bet</span> V3
-    </div>
+<div class="logo">
+🚀 GugaBet V3
+</div>
 
-    <div>
+<div>
 
-    {% if session.get("user_id") %}
-        <a href="{{ url_for('dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('logout') }}">Sair</a>
-    {% else %}
-        <a href="{{ url_for('login') }}">Login</a>
-        <a href="{{ url_for('register') }}">Criar conta</a>
-    {% endif %}
+<a href="{{ url_for('home') }}">Início</a>
 
-    </div>
+{% if session.get('user_id') %}
+<a href="{{ url_for('dashboard') }}">Minha Conta</a>
+<a href="{{ url_for('logout') }}">Sair</a>
+{% else %}
+<a href="{{ url_for('login') }}">Entrar</a>
+<a href="{{ url_for('register') }}">Criar conta</a>
+{% endif %}
 
 </div>
 
+</nav>
+
 <div class="container">
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-
-    {% for category, message in messages %}
-
-        <div class="{{ category }}">
-            {{ message }}
-        </div>
-
-    {% endfor %}
-
+{% with messages = get_flashed_messages() %}
+{% for message in messages %}
+<div class="flash">{{ message }}</div>
+{% endfor %}
 {% endwith %}
 
 {{ content|safe }}
@@ -296,70 +283,78 @@ th, td {
 """
 
 
-# --------------------------------------------------
+def render_page(content):
+    return render_template_string(
+        BASE,
+        content=content
+    )
+
+
+# =========================================================
 # HOME
-# --------------------------------------------------
+# =========================================================
 
 @app.route("/")
 def home():
 
     content = """
-    <div class="card hero">
+    <div class="card" style="text-align:center">
 
-        <h1>🎯 GugaBet V3</h1>
+        <h1>🚀 GugaBet V3</h1>
 
         <p>
             Simulador esportivo com créditos virtuais.
         </p>
 
+        <p class="small">
+            Projeto experimental para entretenimento e desenvolvimento.
+        </p>
+
         <br>
 
-        <a href="/register">
-            <button>Criar minha conta</button>
+        <a class="btn" href="/register">
+            Criar minha conta
         </a>
 
-        <br><br>
+    </div>
 
-        <a href="/login">
-            <button style="background:#334155;color:white;">
-                Entrar
-            </button>
-        </a>
+    <div class="grid">
 
-        <br><br>
+        <div class="card">
+            <h3>🏆 Esportes</h3>
+            <p>Eventos esportivos simulados.</p>
+        </div>
 
-        <div class="small">
-            ⚠️ Projeto demonstrativo.
-            Não utiliza dinheiro real.
+        <div class="card">
+            <h3>💰 Créditos</h3>
+            <p>Comece com créditos virtuais.</p>
+        </div>
+
+        <div class="card">
+            <h3>📊 Histórico</h3>
+            <p>Acompanhe suas simulações.</p>
         </div>
 
     </div>
     """
 
-    return render_template_string(
-        BASE_HTML,
-        content=content
-    )
+    return render_page(content)
 
 
-# --------------------------------------------------
-# REGISTRO
-# --------------------------------------------------
+# =========================================================
+# CADASTRO
+# =========================================================
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
 
     if request.method == "POST":
 
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
+        username = request.form["username"].strip()
+        password = request.form["password"]
 
-        if len(username) < 3:
-            flash("O usuário precisa ter pelo menos 3 caracteres.", "error")
-            return redirect(url_for("register"))
-
-        if len(password) < 4:
-            flash("A senha precisa ter pelo menos 4 caracteres.", "error")
+        if not username or not password:
+            flash("Preencha todos os campos.")
             return redirect(url_for("register"))
 
         conn = get_db()
@@ -368,7 +363,8 @@ def register():
 
             conn.execute(
                 """
-                INSERT INTO users (username, password, balance)
+                INSERT INTO users
+                (username, password, credits)
                 VALUES (?, ?, ?)
                 """,
                 (
@@ -384,41 +380,28 @@ def register():
 
             conn.close()
 
-            flash("Esse usuário já existe.", "error")
-
+            flash("Esse usuário já existe.")
             return redirect(url_for("register"))
 
         conn.close()
 
-        flash(
-            "Conta criada! Você recebeu 1.000 créditos virtuais.",
-            "success"
-        )
-
+        flash("Conta criada! Agora faça login.")
         return redirect(url_for("login"))
 
     content = """
     <div class="card">
 
-        <h2>🚀 Criar conta</h2>
+        <h2>📝 Criar conta</h2>
 
         <form method="POST">
 
             <label>Usuário</label>
-
-            <input
-                type="text"
-                name="username"
-                placeholder="Digite seu usuário"
-                required
-            >
+            <input name="username" required>
 
             <label>Senha</label>
-
             <input
                 type="password"
                 name="password"
-                placeholder="Digite sua senha"
                 required
             >
 
@@ -431,23 +414,20 @@ def register():
     </div>
     """
 
-    return render_template_string(
-        BASE_HTML,
-        content=content
-    )
+    return render_page(content)
 
 
-# --------------------------------------------------
+# =========================================================
 # LOGIN
-# --------------------------------------------------
+# =========================================================
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
 
     if request.method == "POST":
 
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
+        username = request.form["username"]
+        password = request.form["password"]
 
         conn = get_db()
 
@@ -468,25 +448,19 @@ def login():
 
             return redirect(url_for("dashboard"))
 
-        flash("Usuário ou senha incorretos.", "error")
+        flash("Usuário ou senha incorretos.")
 
     content = """
     <div class="card">
 
-        <h2>🔐 Login</h2>
+        <h2>🔐 Entrar</h2>
 
         <form method="POST">
 
             <label>Usuário</label>
-
-            <input
-                type="text"
-                name="username"
-                required
-            >
+            <input name="username" required>
 
             <label>Senha</label>
-
             <input
                 type="password"
                 name="password"
@@ -502,15 +476,24 @@ def login():
     </div>
     """
 
-    return render_template_string(
-        BASE_HTML,
-        content=content
-    )
+    return render_page(content)
 
 
-# --------------------------------------------------
+# =========================================================
+# LOGOUT
+# =========================================================
+
+@app.route("/logout")
+def logout():
+
+    session.clear()
+
+    return redirect(url_for("home"))
+
+
+# =========================================================
 # DASHBOARD
-# --------------------------------------------------
+# =========================================================
 
 @app.route("/dashboard")
 @login_required
@@ -536,303 +519,291 @@ def dashboard():
 
     conn.close()
 
-    matches = [
-        ("Flamengo", "Palmeiras", 1.80, 2.10),
-        ("Barcelona", "Real Madrid", 2.20, 1.75),
-        ("Lakers", "Celtics", 1.90, 1.95),
-        ("Chiefs", "49ers", 1.85, 2.00),
-    ]
-
-    matches_html = ""
-
-    for i, match in enumerate(matches):
-
-        home, away, odd_home, odd_away = match
-
-        matches_html += f"""
-        <div class="match">
-
-            <div>
-                <div class="team">{home}</div>
-                <div class="small">vs</div>
-                <div class="team">{away}</div>
-            </div>
-
-            <div>
-
-                <form method="POST"
-                      action="/bet"
-                      style="margin-bottom:10px;">
-
-                    <input type="hidden"
-                           name="team"
-                           value="{home}">
-
-                    <input type="hidden"
-                           name="odds"
-                           value="{odd_home}">
-
-                    <input type="number"
-                           name="amount"
-                           placeholder="Créditos"
-                           min="1"
-                           step="1"
-                           required>
-
-                    <button type="submit">
-                        {home} — {odd_home}
-                    </button>
-
-                </form>
-
-                <form method="POST"
-                      action="/bet">
-
-                    <input type="hidden"
-                           name="team"
-                           value="{away}">
-
-                    <input type="hidden"
-                           name="odds"
-                           value="{odd_away}">
-
-                    <input type="number"
-                           name="amount"
-                           placeholder="Créditos"
-                           min="1"
-                           step="1"
-                           required>
-
-                    <button type="submit"
-                            style="background:#2563eb;color:white;">
-
-                        {away} — {odd_away}
-
-                    </button>
-
-                </form>
-
-            </div>
-
-        </div>
-        """
-
-    history_html = ""
-
-    for bet in bets:
-
-        history_html += f"""
-        <tr>
-            <td>{bet["team"]}</td>
-            <td>{bet["amount"]:.0f}</td>
-            <td>{bet["odds"]:.2f}</td>
-            <td>{bet["status"]}</td>
-        </tr>
-        """
-
     content = f"""
-
     <div class="card">
 
-        <h2>👋 Olá, {user["username"]}</h2>
+        <h1>Olá, {user["username"]}! 👋</h1>
 
-        <p class="small">
-            Seu saldo virtual
-        </p>
+        <p>Seu saldo virtual:</p>
 
-        <div class="balance">
-            {user["balance"]:.2f} créditos
+        <div class="credit">
+            {user["credits"]:,} créditos
         </div>
 
     </div>
 
     <div class="card">
 
-        <h2>🏆 Eventos disponíveis</h2>
+        <h2>🏆 Simulador esportivo</h2>
 
-        <p class="small">
-            Escolha um resultado e utilize seus créditos virtuais.
+        <p>
+            Escolha um evento para fazer uma simulação.
         </p>
 
-        {matches_html}
+        <div class="grid">
+
+            <div class="card">
+
+                <h3>⚽ Futebol</h3>
+
+                <p>Brasil FC x USA FC</p>
+
+                <a class="btn"
+                   href="/bet/futebol">
+                   Simular
+                </a>
+
+            </div>
+
+            <div class="card">
+
+                <h3>🏀 Basquete</h3>
+
+                <p>Raleigh x Charlotte</p>
+
+                <a class="btn"
+                   href="/bet/basquete">
+                   Simular
+                </a>
+
+            </div>
+
+        </div>
 
     </div>
 
     <div class="card">
 
         <h2>📊 Histórico</h2>
-
-        <table>
-
-            <tr>
-                <th>Time</th>
-                <th>Valor</th>
-                <th>Cotação</th>
-                <th>Status</th>
-            </tr>
-
-            {history_html}
-
-        </table>
-
-    </div>
-
     """
 
-    return render_template_string(
-        BASE_HTML,
-        content=content
-    )
+    if bets:
+
+        for bet in bets:
+
+            content += f"""
+            <p>
+            {bet["sport"]} —
+            {bet["event"]} —
+            {bet["selection"]} —
+            {bet["stake"]} créditos
+            </p>
+            """
+
+    else:
+
+        content += """
+        <p class="small">
+            Nenhuma simulação ainda.
+        </p>
+        """
+
+    content += "</div>"
+
+    return render_page(content)
 
 
-# --------------------------------------------------
-# CRIAR SIMULAÇÃO
-# --------------------------------------------------
+# =========================================================
+# APOSTA VIRTUAL
+# =========================================================
 
-@app.route("/bet", methods=["POST"])
+@app.route("/bet/<sport>", methods=["GET", "POST"])
 @login_required
-def bet():
+def bet(sport):
 
-    team = request.form.get("team")
-    odds = float(request.form.get("odds", 0))
-    amount = float(request.form.get("amount", 0))
+    if sport == "futebol":
 
-    if amount <= 0:
-        flash("Digite um valor válido.", "error")
-        return redirect(url_for("dashboard"))
+        event = "Brasil FC x USA FC"
 
-    conn = get_db()
+        selections = [
+            ("Brasil FC", 1.80),
+            ("Empate", 3.20),
+            ("USA FC", 2.40)
+        ]
 
-    user = conn.execute(
-        "SELECT * FROM users WHERE id = ?",
-        (session["user_id"],)
-    ).fetchone()
+    else:
 
-    if amount > user["balance"]:
+        event = "Raleigh x Charlotte"
+
+        selections = [
+            ("Raleigh", 1.70),
+            ("Charlotte", 2.10)
+        ]
+
+    if request.method == "POST":
+
+        selection = request.form["selection"]
+        stake = int(request.form["stake"])
+
+        if stake <= 0:
+            flash("Valor inválido.")
+            return redirect(request.url)
+
+        conn = get_db()
+
+        user = conn.execute(
+            "SELECT * FROM users WHERE id = ?",
+            (session["user_id"],)
+        ).fetchone()
+
+        if stake > user["credits"]:
+
+            conn.close()
+
+            flash("Créditos insuficientes.")
+            return redirect(request.url)
+
+        odds = dict(selections).get(
+            selection,
+            1.0
+        )
+
+        conn.execute(
+            """
+            UPDATE users
+            SET credits = credits - ?
+            WHERE id = ?
+            """,
+            (stake, session["user_id"])
+        )
+
+        conn.execute(
+            """
+            INSERT INTO bets
+            (user_id, sport, event, selection, odds, stake)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session["user_id"],
+                sport,
+                event,
+                selection,
+                odds,
+                stake
+            )
+        )
+
+        conn.commit()
 
         conn.close()
 
-        flash(
-            "Você não possui créditos suficientes.",
-            "error"
-        )
-
+        flash("Simulação registrada!")
         return redirect(url_for("dashboard"))
 
-    # Simulação simples
-    won = random.choice([True, False])
+    options = ""
 
-    if won:
+    for name, odds in selections:
 
-        payout = amount * odds
-        new_balance = user["balance"] - amount + payout
-
-        status = "GANHOU"
-        result = "WIN"
-
-    else:
-
-        new_balance = user["balance"] - amount
-
-        status = "PERDEU"
-        result = "LOSS"
-
-    conn.execute(
+        options += f"""
+        <option value="{name}">
+            {name} — odd {odds}
+        </option>
         """
-        UPDATE users
-        SET balance = ?
-        WHERE id = ?
-        """,
-        (
-            new_balance,
-            session["user_id"]
-        )
-    )
 
-    conn.execute(
-        """
-        INSERT INTO bets
-        (user_id, team, amount, odds, status, result)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            session["user_id"],
-            team,
-            amount,
-            odds,
-            status,
-            result
-        )
-    )
+    content = f"""
+    <div class="card">
 
-    conn.commit()
+        <h2>🏆 {event}</h2>
+
+        <form method="POST">
+
+            <label>Escolha</label>
+
+            <select name="selection">
+                {options}
+            </select>
+
+            <label>
+                Créditos virtuais
+            </label>
+
+            <input
+                type="number"
+                name="stake"
+                min="1"
+                required
+            >
+
+            <button type="submit">
+                Confirmar simulação
+            </button>
+
+        </form>
+
+    </div>
+    """
+
+    return render_page(content)
+
+
+# =========================================================
+# ADMIN
+# =========================================================
+
+@app.route("/admin")
+@admin_required
+def admin():
+
+    conn = get_db()
+
+    users = conn.execute(
+        "SELECT id, username, credits, is_admin FROM users"
+    ).fetchall()
+
+    bets = conn.execute(
+        "SELECT * FROM bets ORDER BY id DESC LIMIT 20"
+    ).fetchall()
+
     conn.close()
 
-    if won:
+    content = """
+    <div class="card">
 
-        flash(
-            f"🎉 Resultado: GANHOU! +{payout:.2f} créditos.",
-            "success"
-        )
+        <h1>⚙️ Painel Administrativo</h1>
 
-    else:
+        <h2>Usuários</h2>
+    """
 
-        flash(
-            f"Resultado: perdeu {amount:.2f} créditos.",
-            "error"
-        )
+    for user in users:
 
-    return redirect(url_for("dashboard"))
+        content += f"""
+        <p>
+        #{user["id"]}
+        — {user["username"]}
+        — {user["credits"]:,} créditos
+        </p>
+        """
 
+    content += """
+        <h2>Últimas simulações</h2>
+    """
 
-# --------------------------------------------------
-# LOGOUT
-# --------------------------------------------------
+    for bet_item in bets:
 
-@app.route("/logout")
-def logout():
+        content += f"""
+        <p>
+        {bet_item["username"] if "username" in bet_item.keys() else ""}
+        {bet_item["sport"]}
+        —
+        {bet_item["selection"]}
+        —
+        {bet_item["stake"]} créditos
+        </p>
+        """
 
-    session.clear()
+    content += "</div>"
 
-    return redirect(url_for("home"))
-
-
-# --------------------------------------------------
-# STATUS
-# --------------------------------------------------
-
-@app.route("/status")
-def status():
-
-    return {
-        "status": "online",
-        "version": "GugaBet V3",
-        "mode": "virtual_credits_only"
-    }
+    return render_page(content)
 
 
-# --------------------------------------------------
-# INICIAR BANCO
-# --------------------------------------------------
-
-init_db()
-
-
-# --------------------------------------------------
-# RODAR LOCALMENTE
-# --------------------------------------------------
+# =========================================================
+# EXECUÇÃO
+# =========================================================
 
 if __name__ == "__main__":
 
-    port = int(
-        os.environ.get(
-            "PORT",
-            5000
-        )
-    )
-
     app.run(
         host="0.0.0.0",
-        port=port,
-        debug=False
+        port=int(os.environ.get("PORT", 5000)),
+        debug=True
     )
